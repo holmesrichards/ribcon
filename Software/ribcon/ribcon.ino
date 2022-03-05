@@ -3,6 +3,13 @@
  * by Rich Holmes Feb 2022
  */
 
+#define DBG 0  // Nonzero for debug, > 1 for more verbosity
+//             // Set to 0 when done debugging to keep it speedy!
+
+#if DBG
+long int millast = 0;
+#endif
+
 #include <dac_ino.h>
 using namespace dcrd;         // dac/ino library
 
@@ -35,8 +42,56 @@ int pa_n_entries = 0;           // Number of fresh entries
 unsigned cvout = 0;             // CV to output
 bool gate = false;              // gate to output
 
+#if DBG
+void dbgprint()
+{
+  // Print debug information to serial monitor
+  Serial.print ("pot ");
+  Serial.print(pot);
+  Serial.print (" n ");
+  Serial.print (pa_n_entries);
+  Serial.print(" Smoothed = ");
+  Serial.print(pot_smooth);
+  Serial.print (" Position = ");
+  Serial.print (pot_k);
+  Serial.print (" CVout = ");
+  Serial.print (cvout);
+  Serial.print(" Gate = ");
+  if (gate)
+    Serial.println ("on");
+  else
+    Serial.println ("off");
+
+#if DBG>1
+  Serial.println ("Array:");
+  int nline = 0;
+  for (int i = 0; i < PA_DIM; ++i)
+    {
+      Serial.print (" ");
+      Serial.print (pa[i]);
+      if (pa_idx < pa_n_entries && (i < pa_idx || i >= pa_idx + PA_DIM - pa_n_entries)
+	  ||
+	  pa_idx >= pa_n_entries && (i >= pa_idx - pa_n_entries && i < pa_idx))
+	Serial.print ("*"); // highlight samples used for averaging
+      if (++nline == 10)
+	{
+	  Serial.println();
+	  nline = 0;
+	}
+    }
+  Serial.println();
+#endif  
+    
+  millast = millis();
+}
+#endif
+
 void setup()
 {
+#if DBG
+    Serial.begin(9600);
+#endif
+    
   // Set up board object
   dac_inoBoard.begin();
   dac_inoBoard.writeGate(dac_ino::GateOutChannel::A, false); // start with gate off
@@ -53,6 +108,14 @@ void loop()
     {
       // Pot value is high so it is not being touched
       // Turn off gate and reset array filling
+#if DBG
+      if (gate)
+	{
+	  Serial.println("Gate turned off");
+	  dbgprint();
+	  Serial.println();
+	}
+#endif      
       gate = false;
       pa_n_entries = 0;
     }
@@ -89,6 +152,12 @@ void loop()
   dac_inoBoard.writeCV(dac_ino::CVOutChannel::A, cvout);      
   dac_inoBoard.writeCV(dac_ino::CVOutChannel::B, cvout);      
   dac_inoBoard.writeGate(dac_ino::GateOutChannel::A, gate);
+
+#if DBG
+  // Print debug output every 1/2 second
+  if (millis()-millast > 500)
+    dbgprint();
+#endif
 
   delay (DELAY);
 }
